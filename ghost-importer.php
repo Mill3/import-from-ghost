@@ -323,7 +323,7 @@ class Ghost_Importer
         $this->log("Importing image : " . $image_url);
         $image = $image_url;
 
-        $get = wp_remote_get($image);
+        $get = wp_remote_get($image, array('timeout' => 240));
         $type = wp_remote_retrieve_header($get, 'content-type');
 
         if (!$type) {
