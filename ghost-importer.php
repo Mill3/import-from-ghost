@@ -259,6 +259,14 @@ class Ghost_Importer
             'meta_input'=>array()
         );
 
+        // go to next if post exists
+        if (get_page_by_path($post->slug, OBJECT, 'post')) {
+            $this->log("Found post with slug <strong>'$post->slug'</strong>");
+            return true;
+        } else {
+            $this->log("No post found with slug <strong>'$post->slug'</strong>.. Moving on!");
+        }
+
         if ($post->meta_description) {
             $newpost['meta_input']['_yoast_wpseo_metadesc'] = $post->meta_description;
         }
