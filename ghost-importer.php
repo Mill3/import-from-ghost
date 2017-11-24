@@ -273,9 +273,8 @@ class Ghost_Importer
             $inserted = 1;
         }
 
-        if ($post->image && $inserted) {
+        if (!$this->dryrun && $post->image && $inserted) {
             $attach_id = $this->uploadRemoteImageAndAttach($this->ghost_url . $post->image, $inserted);
-            set_post_thumbnail( $inserted, $attach_id );
         }
 
         if (is_wp_error($inserted)) {
@@ -324,6 +323,8 @@ class Ghost_Importer
         $attach_data = wp_generate_attachment_metadata($attach_id, $mirror['file']);
         wp_update_attachment_metadata($attach_id, $attach_data);
 
+        set_post_thumbnail( $parent_id, $attach_id );
+
         return $attach_id;
     }
 
@@ -332,11 +333,12 @@ class Ghost_Importer
         $post = get_post($postid);
         if (!$this->dryrun) {
             $content = $post->post_content;
+        } else {
+            $content = $post->post_content;
         }
         // Run regex to find image URLs in content
         $matches = [];
         preg_match_all('/(\/blog\/content\/images\/.\S+)/', $content, $matches, PREG_PATTERN_ORDER);
-        print_r($matches);
         if (!empty($matches[0])) {
             foreach ($matches[1] as $match) {
                 $this->log('Migrating image '.basename($match));
@@ -409,9 +411,4 @@ class Ghost_Importer
             ));
     }
 
-    private function copyImageFromServer($url)
-    {
-        $wp_upload_dir = wp_upload_dir();
-        return file_put_contents($wp_upload_dir['path'] . '/' . basename($url), file_get_contents($this->ghost_url.$url));
-    }
 }
