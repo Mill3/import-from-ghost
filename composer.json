@@ -1,0 +1,13 @@
+{
+    "name": "thetoine/import-from-ghost",
+    "type": "wp-plugin",
+    "authors": [
+        {
+            "name": "Antoine Girard",
+            "email": "thetoine@gmail.com"
+        }
+    ],
+    "require": {
+        "sunra/php-simple-html-dom-parser": "^1.5"
+    }
+}

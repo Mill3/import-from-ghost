@@ -13,6 +13,11 @@ if (! defined('ABSPATH')) {
     exit;
 } // Exit if accessed directly
 
+// composer autoload class
+require_once(__DIR__ . '/vendor/autoload.php');
+
+use Sunra\PhpSimple\HtmlDomParser;
+
 /**
  * Returns the main instance of Ghost Importer to prevent the need to use globals.
  */
@@ -128,7 +133,7 @@ class Ghost_Importer
             $importfile = $this->fileUpload();
             $ghost_url = htmlspecialchars($_POST['ghost_url']);
             if ($importfile) {
-                echo '<h3 class="gi-running-import" data-gi-trigger-import="'.$this->import_id.'" data-gi-dryrun="'.$dryrun.'" data-gi-import-file="'.$importfile.'" data-gi-nonce="'.wp_create_nonce('gi-trigger-import').'" data-gi-ghost-url="'.$ghost_url.'">Running import. <span class="gi-progress" style="display:none;"><span class="gi-upto">0</span> of <span class="gi-totalposts">0</span> posts imported.</span></h3><h3 class="gi-finished-import" style="display: none;color:#4BB543;">Import completed. <span class="gi-upto"></span> posts imported.</h3><h3 class="gi-errored-import" style="display:none;">Error during import. Check the log below for information.</h3><div class="gi-progress-log"></div>';
+                echo '<h3 class="gi-running-import" data-gi-trigger-import="'.$this->import_id.'" data-gi-dryrun="'.$dryrun.'" data-gi-import-file="'.$importfile.'" data-gi-nonce="'.wp_create_nonce('gi-trigger-import').'" data-gi-ghost-url="'.$ghost_url.'">Running import. <span class="gi-progress" style="display:none;"><span class="gi-upto">0</span> of <span class="gi-totalposts">0</span> posts processed.</span></h3><h3 class="gi-finished-import" style="display: none;color:#4BB543;">Import completed. <span class="gi-upto"></span> posts imported.</h3><h3 class="gi-errored-import" style="display:none;">Error during import. Check the log below for information.</h3><div class="gi-progress-log"></div>';
                 echo '<style>.gi-log-entry.error-msg{color:red}</style>';
                 wp_register_script('ghost_importer', plugin_dir_url(__FILE__) . 'ghost-importer.js', array('jquery'), '1.0', true);
                 wp_enqueue_script('ghost_importer');
@@ -278,11 +283,12 @@ class Ghost_Importer
         if (!$this->dryrun) {
             $inserted = wp_insert_post($newpost);
         } else {
-            $inserted = 1;
+            $inserted = 983;
         }
 
         if (!$this->dryrun && $post->image && $inserted) {
             $attach_id = $this->uploadRemoteImageAndAttach($this->ghost_url . $post->image, $inserted);
+            set_post_thumbnail( $inserted, $attach_id );
         }
 
         if (is_wp_error($inserted)) {
@@ -290,7 +296,9 @@ class Ghost_Importer
         }
 
         // Copy images and update content
-        // $this->migrateImages($inserted, $post->html);
+        $this->migrateImages($inserted);
+
+        return true;
     }
 
     private function getTagsForPost($id)
@@ -312,13 +320,14 @@ class Ghost_Importer
 
     private function uploadRemoteImageAndAttach($image_url, $parent_id)
     {
-        $this->log("importing featured image : " . $image_url);
+        $this->log("Importing image : " . $image_url);
         $image = $image_url;
 
         $get = wp_remote_get($image);
         $type = wp_remote_retrieve_header($get, 'content-type');
 
         if (!$type) {
+            $this->log("Error downloading image");
             return false;
         }
 
@@ -331,63 +340,34 @@ class Ghost_Importer
         $attach_data = wp_generate_attachment_metadata($attach_id, $mirror['file']);
         wp_update_attachment_metadata($attach_id, $attach_data);
 
-        set_post_thumbnail( $parent_id, $attach_id );
-
         return $attach_id;
     }
 
-    private function migrateImages($postid, $content)
+    private function migrateImages($postID)
     {
-        $post = get_post($postid);
-        if (!$this->dryrun) {
+        $post = get_post($postID);
+        if ($post && !$this->dryrun) {
             $content = $post->post_content;
-        } else {
-            $content = $post->post_content;
-        }
-        // Run regex to find image URLs in content
-        $matches = [];
-        preg_match_all('/(\/blog\/content\/images\/.\S+)/', $content, $matches, PREG_PATTERN_ORDER);
-        if (!empty($matches[0])) {
-            foreach ($matches[1] as $match) {
-                $this->log('Migrating image '.basename($match));
-                if (!$this->dryrun) {
-                    // set_time_limit(30);
-                    // // Copy image from server
-                    // $wp_upload_dir = wp_upload_dir();
-                    // if (!$this->copyImageFromServer($match)) {
-                    //     $this->log("Couldn't copy image from: ".$this->ghost_url.$match, 1, 0);
-                    //     continue;
-                    // }
-                    //
-                    // // Prepare and insert attachment
-                    // $filename = $wp_upload_dir['path'].'/'.basename($match);
-                    // $filetype = wp_check_filetype(basename($filename), null);
-                    // $attachment = array( 'guid' => $wp_upload_dir['url'] . '/' . basename($match), 'post_mime_type' => $filetype['type'], 'post_title' => preg_replace('/\.[^.]+$/', '', basename($match)), 'post_content' => '', 'post_status' => 'inherit' );
-                    // $attach_id = wp_insert_attachment($attachment, $filename, $post->ID);
-                    //
-                    // // Required for wp_generate_attachment_metadata()
-                    // // require_once(ABSPATH . 'wp-admin/includes/image.php');
-                    //
-                    // // Generate the metadata for the attachment, and update the database record.
-                    // $attach_data = wp_generate_attachment_metadata($attach_id, $filename);
-                    // wp_update_attachment_metadata($attach_id, $attach_data);
-                    //
-                    $attach_id = uploadRemoteImageAndAttach($this->ghost_url . $match);
+            $html = HtmlDomParser::str_get_html($content);
 
-                    // Get the "large" (fallback to largest) version of the image to insert
-                    // Falls back to largest if the original dimensions are smaller
-                    $newurl = wp_get_attachment_image_src($attach_id, "large")[0];
+            // find img tags
+            if ($html) {
+                foreach ($html->find('img') as $key => $img) {
+                    set_time_limit(30);
+                    $attach_id = $this->uploadRemoteImageAndAttach($this->ghost_url . $img->src, $postID);
+                    if ($attach_id) {
+                        $this->log("Imported new image for post : ". $attach_id);
+                        $newImageSRC = wp_get_attachment_image_src($attach_id, "large")[0];
+                        $content = str_replace($img->src, $newImageSRC, $content);
+                        wp_update_post(
+                            array(
+                                'ID'=>$post->ID,
+                                'post_content'=>$content
+                            )
+                        );
+                    }
 
-                    // Strip domain from img url
-                    $newurl = str_replace(site_url(), '', $newurl);
-
-                    // Replace in the post content and re-save
-                    $content = str_replace($match, $newurl, $content);
                 }
-            }
-            // Update post once with all image changes to save time and prevent saving over the top of itself
-            if (!$this->dryrun) {
-                wp_update_post(array('ID'=>$post->ID,'post_content'=>$content));
             }
         }
     }
