@@ -353,7 +353,7 @@ class Ghost_Importer
             // find img tags
             if ($html) {
                 foreach ($html->find('img') as $key => $img) {
-                    set_time_limit(30);
+                    set_time_limit(180);
                     $attach_id = $this->uploadRemoteImageAndAttach($this->ghost_url . $img->src, $postID);
                     if ($attach_id) {
                         $this->log("Imported new image for post : ". $attach_id);
